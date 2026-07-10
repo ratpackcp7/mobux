@@ -22,12 +22,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build + install
-        # Installs straight from this checkout into ~/.cargo/bin/mobux — the
-        # same path the systemd unit's ExecStart points at (DEPLOY.md).
-        run: cargo install --path . --locked --force
+        # Absolute path, not `cargo` off PATH — this runner is one of several
+        # self-hosted runners sharing the box under a launcher that doesn't
+        # reliably pass ~/.cargo/bin through (systemd Environment= and the
+        # runner's own .env both proved unreliable here). Installs straight
+        # from this checkout into ~/.cargo/bin/mobux — the same path the
+        # systemd unit's ExecStart points at (DEPLOY.md).
+        run: ~/.cargo/bin/cargo install --path . --locked --force
 
       - name: Restart service
-        run: systemctl --user restart mobux
+        run: /usr/bin/systemctl --user restart mobux
 
       - name: Health check
         # Give the restart a moment, then confirm the new binary actually
