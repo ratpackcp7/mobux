@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 import { signal } from "@preact/signals";
 import { Link } from "wouter-preact";
-import { UpdateCard } from "../components/settings/Update.jsx";
 import { NotificationsCard } from "../components/settings/Notifications.jsx";
 import { RendererCard } from "../components/settings/Renderer.jsx";
 import { ThemeCard } from "../components/settings/Theme.jsx";
@@ -12,9 +11,17 @@ import { ListenCard } from "../components/settings/Listen.jsx";
 import { BuildInfoCard } from "../components/settings/BuildInfo.jsx";
 
 // Settings page. Composes the ported cards in the same order as the
-// Rust-rendered /settings page (settings_page in src/main.rs): software update,
-// install-app link, notifications, terminal renderer, theme, shell integration,
-// nodes, speech-to-text, listen, build info.
+// Rust-rendered /settings page (settings_page in src/main.rs): install-app
+// link, notifications, terminal renderer, theme, shell integration, nodes,
+// speech-to-text, listen, build info.
+//
+// The software-update card (crates.io version check + in-app "Update now")
+// is deliberately dropped here: this fork deploys via .github/workflows/
+// deploy.yml on every merge to main, and the crates.io-based updater would
+// pull *upstream* mvhenten/mobux's published releases instead, overwriting
+// this fork's build. The server-side run path is also disabled
+// (MOBUX_UPDATE_DISABLE_RUN=1 in the systemd unit) so a direct POST to
+// /api/update/run can't do it either.
 //
 // Native-mobile row list (#192): every card renders as a `.settings-group` —
 // a heading plus edge-to-edge `.settings-row`s, no card chrome. That uniform
@@ -76,8 +83,6 @@ export function SettingsPage() {
           onInput={(e) => (filterQuery.value = e.target.value)}
         />
       </div>
-
-      <UpdateCard />
 
       <section class="settings-group" id="install-app">
         <h2>Install app</h2>

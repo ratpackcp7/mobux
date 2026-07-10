@@ -1,0 +1,48 @@
+name: Deploy
+
+# Runs on a self-hosted runner living on acerserver itself, so the deploy step
+# never needs inbound SSH/network exposure to the box. Builds straight from
+# the merged main commit (no crates.io publish — the `mobux` crate name is
+# already taken by upstream mvhenten/mobux; this fork just ships a binary
+# directly to :5151). See DEPLOY.md → "Redeploy a new version" for the manual
+# equivalent of what this workflow automates.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-acerserver
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, acerserver]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build + install
+        # Installs straight from this checkout into ~/.cargo/bin/mobux — the
+        # same path the systemd unit's ExecStart points at (DEPLOY.md).
+        run: cargo install --path . --locked --force
+
+      - name: Restart service
+        run: systemctl --user restart mobux
+
+      - name: Health check
+        # Give the restart a moment, then confirm the new binary actually
+        # came up before calling the job green. No auto-rollback here (that's
+        # the in-app self-updater's job) — a failed health check just fails
+        # the workflow loudly so it doesn't look like a silent success.
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsSk -u "$MOBUX_AUTH_USER:$MOBUX_PIN" https://localhost:5151/api/identify; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::mobux did not come back healthy after restart"
+          exit 1
+        env:
+          MOBUX_AUTH_USER: ${{ secrets.MOBUX_AUTH_USER }}
+          MOBUX_PIN: ${{ secrets.MOBUX_PIN }}
