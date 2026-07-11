@@ -21,6 +21,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build frontend assets
+        # web/static/spa is intentionally gitignored. Build it before Cargo
+        # embeds web/static into the self-contained production binary.
+        run: |
+          npm ci --ignore-scripts
+          node web/build.js
+          test -s web/static/spa/index.html
+
       - name: Build + install
         # Installs straight from this checkout into ~/.cargo/bin/mobux — the
         # same path the systemd unit's ExecStart points at (DEPLOY.md).
