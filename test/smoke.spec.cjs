@@ -521,22 +521,43 @@ test("reader view renders buffer text", async ({ page }) => {
   await expect(page.locator("#reader")).toBeVisible();
   await expect(page.locator("#terminal")).toBeHidden();
 
-  const statusBarStyle = await page.evaluate(() => {
+  const statusBarLayout = await page.evaluate(() => {
+    const statusBar = document.createElement("div");
+    statusBar.className = "reader-statusbar";
+    statusBar.style.cssText =
+      "left:-10000px;right:auto;bottom:auto;width:80px;visibility:hidden";
+
     const probe = document.createElement("div");
     probe.className = "reader-statusbar-inner";
-    document.body.appendChild(probe);
+
+    const chip = document.createElement("span");
+    chip.className = "rb-chip";
+    chip.style.backgroundColor = "rgb(1, 2, 3)";
+    chip.textContent = "BACKGROUND_STATUS_RUN_WITHOUT_BREAK_OPPORTUNITIES";
+
+    probe.appendChild(chip);
+    statusBar.appendChild(probe);
+    document.body.appendChild(statusBar);
+
     const style = getComputedStyle(probe);
     const result = {
       whiteSpace: style.whiteSpace,
       overflowWrap: style.overflowWrap,
+      chipDisplay: getComputedStyle(chip).display,
+      horizontallyOverflows: probe.scrollWidth > probe.clientWidth,
+      chipLineCount: chip.getClientRects().length,
     };
-    probe.remove();
+    statusBar.remove();
     return result;
   });
-  expect(statusBarStyle).toEqual({
+  expect(statusBarLayout).toEqual({
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
+    chipDisplay: "inline",
+    horizontallyOverflows: false,
+    chipLineCount: expect.any(Number),
   });
+  expect(statusBarLayout.chipLineCount).toBeGreaterThan(1);
 
   await page.evaluate(() => window.__mobuxView.swap("xterm"));
   await page.waitForTimeout(100);
