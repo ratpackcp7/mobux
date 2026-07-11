@@ -23,4 +23,13 @@ import(
   /* @vite-ignore */ new URL("/static/telemetry.js", location.origin).href
 ).catch((e) => console.warn("telemetry.js load failed", e));
 
+// The backend serves a push-only service worker at the origin root. Register
+// it from the SPA entry point so every route gets the same registration and
+// Chrome can see the app's active service worker when evaluating installability.
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch((e) => {
+    console.warn("service worker registration failed", e);
+  });
+}
+
 render(<App />, document.getElementById("app"));

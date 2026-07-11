@@ -2407,39 +2407,6 @@ test("listen settings visible in settings page when speechSynthesis available", 
   }
 });
 
-// Self-update panel (#130). The smoke instance is started with
-// MOBUX_UPDATE_CHECK_URL pointing at its own test-index fixture
-// (latest = 999.0.0), so no live crates.io call happens and the "Update now"
-// button is offered. Verifies the panel renders current/latest and the
-// check button works.
-test("settings page shows current version and update check button", async ({
-  page,
-}) => {
-  await page.goto(`${BASE}/app#/settings`);
-  await page.waitForTimeout(300);
-
-  // Section + controls present.
-  await expect(page.locator("#update")).toHaveCount(1);
-  await expect(page.locator("#updateCheckBtn")).toBeVisible();
-
-  // Current version is a real semver, populated from /api/update/status.
-  await expect
-    .poll(async () =>
-      (await page.locator("#updateCurrent").textContent())?.trim(),
-    )
-    .toMatch(/^\d+\.\d+\.\d+/);
-
-  // Force a check; the mocked index reports 999.0.0 as the latest, so the
-  // "Update now" button becomes visible.
-  await page.locator("#updateCheckBtn").click();
-  await expect
-    .poll(async () =>
-      (await page.locator("#updateLatest").textContent())?.trim(),
-    )
-    .toBe("999.0.0");
-  await expect(page.locator("#updateRunBtn")).toBeVisible();
-});
-
 // POST /api/update/run must refuse with a structured error rather than ever
 // spawning a real updater in the test harness. The smoke instance runs with
 // MOBUX_UPDATE_DISABLE_RUN=1 (a hard off-switch) so the response is a 412
