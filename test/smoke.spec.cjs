@@ -521,6 +521,23 @@ test("reader view renders buffer text", async ({ page }) => {
   await expect(page.locator("#reader")).toBeVisible();
   await expect(page.locator("#terminal")).toBeHidden();
 
+  const statusBarStyle = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.className = "reader-statusbar-inner";
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    const result = {
+      whiteSpace: style.whiteSpace,
+      overflowWrap: style.overflowWrap,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(statusBarStyle).toEqual({
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+  });
+
   await page.evaluate(() => window.__mobuxView.swap("xterm"));
   await page.waitForTimeout(100);
   await expect(page.locator("#terminal")).toBeVisible();
