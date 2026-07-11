@@ -104,7 +104,12 @@ journalctl --user -u mobux -f
 
 ### Redeploy a new version
 
+When deploying from a source checkout, build the ignored SPA output before
+Cargo embeds `web/static` into the binary:
+
 ```bash
+npm ci --ignore-scripts
+node web/build.js
 cargo install mobux --locked        # or the --git form
 systemctl --user restart mobux      # sub-second swap; :5151 barely blinks
 ```
