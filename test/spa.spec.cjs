@@ -71,6 +71,27 @@ test("app route serves the SPA shell and Home lists sessions", async ({
   await page.goto(`${APP}#/`, { waitUntil: "networkidle" });
   await expect(page.locator("#app")).toHaveCount(1);
 
+  // The SPA is the install candidate. Its root-scoped service worker is
+  // public and must be registered before Chrome can evaluate the PWA.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          if (!("serviceWorker" in navigator)) return null;
+          const registration = await navigator.serviceWorker.getRegistration(
+            "/",
+          );
+          return (
+            registration?.active?.scriptURL ||
+            registration?.waiting?.scriptURL ||
+            registration?.installing?.scriptURL ||
+            null
+          );
+        }),
+      { timeout: 8000 },
+    )
+    .toBe(new URL("/sw.js", BASE).href);
+
   // Current header: `mobux` wordmark (home link), gear button.
   // No old-style text tabs (.spa-nav / Home / Install tabs).
   await expect(page.locator(".app-wordmark")).toBeVisible();
@@ -1155,8 +1176,7 @@ test("settings: every ported card renders and consumes its endpoint", async ({
 
   await page.goto(`${APP}#/settings`, { waitUntil: "networkidle" });
 
-  // Update / Renderer / Theme / Shell-integration / STT / Install / Notifications.
-  await expect(page.locator("#update h2")).toHaveText("Software update");
+  // Renderer / Theme / Shell-integration / STT / Install / Notifications.
   await expect(page.locator("#renderer-picker")).toBeVisible();
   await expect(page.locator("#theme-picker")).toBeVisible();
   await expect(page.locator("#shell-integration")).toBeVisible();
@@ -1181,12 +1201,6 @@ test("settings: every ported card renders and consumes its endpoint", async ({
     ),
   ).not.toHaveText("…", { timeout: 6000 });
 
-  // Update card resolved a current version.
-  await expect(page.locator("#update .settings-value").first()).not.toHaveText(
-    "…",
-    { timeout: 8000 },
-  );
-
   // Listen + Build-info cards.
   await expect(page.locator("#listen-settings h2")).toHaveText("Listen");
   await expect(page.locator("#build-info h2")).toHaveText("Build");
@@ -1195,7 +1209,6 @@ test("settings: every ported card renders and consumes its endpoint", async ({
   // straight off the loaded <script> tag (issue #192), not fetched — so
   // /static/build-info.json is no longer part of this contract.
   for (const want of [
-    "GET /api/update/status",
     "GET /api/settings/notifications",
     "GET /api/shell-integration/status",
     "GET /api/settings/stt",

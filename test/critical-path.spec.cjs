@@ -1081,7 +1081,9 @@ test("tap-to-snap: a tap snaps to bottom, a swipe does not", async ({
   assertNoFailures(captured);
 });
 
-test("terminal composer: search input (Android autofill workaround)", async ({ page }) => {
+test("terminal composer: search input (Android autofill workaround)", async ({
+  page,
+}) => {
   const captured = seedErrorCapture(page);
   await bootTerminal(page);
   await focusComposer(page);
@@ -1152,7 +1154,11 @@ test("terminal composer: stream typing, Enter, Backspace, paste, IME", async ({
     const dt = new DataTransfer();
     dt.setData("text/plain", "XY\nZ");
     el.dispatchEvent(
-      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }),
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dt,
+      }),
     );
   });
   await expect
@@ -1164,7 +1170,9 @@ test("terminal composer: stream typing, Enter, Backspace, paste, IME", async ({
   await page.evaluate((ch) => {
     const el = document.getElementById("inputText");
     el.focus();
-    el.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    el.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
     el.value = (el.value || "") + ch;
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }, imeChar);
@@ -1185,7 +1193,9 @@ test("terminal composer: stream typing, Enter, Backspace, paste, IME", async ({
   await expect
     .poll(() => visibleTerminalText(page), { timeout: 5000 })
     .toContain(`${prefix}aXYZ${imeChar}`);
-  const cleared = await page.evaluate(() => document.getElementById("inputText").value);
+  const cleared = await page.evaluate(
+    () => document.getElementById("inputText").value,
+  );
   expect(cleared).toBe("");
 
   assertNoFailures(captured);
