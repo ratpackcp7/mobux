@@ -20,6 +20,11 @@
     />
     <meta name="theme-color" content="#0f1115" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
+    <!-- Without this, Chrome has no way to know the page is an installable
+         PWA — the "Install app" / "Add to Home screen" entry never appears
+         in the browser menu at all, regardless of display:standalone in the
+         manifest itself (issue: menu showed no install option). -->
+    <link rel="manifest" href="/static/manifest.json" />
     <!-- Reuse the existing app stylesheet (served by the Rust backend through
          the Vite proxy) so the ported pages match the current look. -->
     <link rel="stylesheet" href="/static/style.css" />
