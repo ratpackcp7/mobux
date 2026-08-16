@@ -1058,8 +1058,7 @@ test("loading splash still clears via the fallback timer when a session emits no
 // up the moment the first PTY output arrived and then sat pinned at the
 // bottom for the rest of the read — splash dismissal is not an input event.
 // The ribbon must instead stay hidden from load through attach and only
-// reveal on actual engagement (tap-to-focus — the same `onDoubleTap`
-// handler that already existed before #198), then hide again on keyboard
+// reveal on actual engagement (single tap-to-focus), then hide again on keyboard
 // dismissal exactly as it already did (input-bar.js's visualViewport
 // handler, unchanged by this fix).
 function ribbonVisible(page) {
@@ -1071,14 +1070,29 @@ function ribbonVisible(page) {
   });
 }
 
-// Simulates the double-tap gesture terminal.js's `onDoubleTap` handler
-// responds to by revealing the input bar (`ensureInputBar().show()`).
-// touch.js's gesture recognizer is wired on #touchOverlay and is
-// renderer-agnostic — it sits above #terminal regardless of whether xterm
-// or sterk is the active engine underneath, so this exercises the same
-// "way in" on both renderer projects this spec runs under. Two real
-// touchstart/touchend pairs fired back-to-back land well inside touch.js's
-// TAP_MS/DTAP_MS windows, exactly like a physical double-tap.
+// One physical tap through the real touch.js recognizer. This is the mobile
+// "type here" gesture: one stationary touchstart/touchend pair must reveal and
+// synchronously focus #inputText so Android retains the user-activation token
+// needed to open Gboard.
+function singleTapOverlay(page, x = 100, y = 100) {
+  return page.evaluate(
+    ({ x, y }) => {
+      const overlay = document.getElementById("touchOverlay");
+      const mkTouch = () =>
+        new Touch({ identifier: 0, target: overlay, clientX: x, clientY: y });
+      const fire = (type, touches) =>
+        overlay.dispatchEvent(
+          new TouchEvent(type, { bubbles: true, cancelable: true, touches }),
+        );
+      fire("touchstart", [mkTouch()]);
+      fire("touchend", []);
+    },
+    { x, y },
+  );
+}
+
+// Retained for regressions that intentionally exercise touch.js's generic
+// double-tap classification. The first tap now already activates the composer.
 function doubleTapOverlay(page, x = 100, y = 100) {
   return page.evaluate(
     ({ x, y }) => {
@@ -1168,7 +1182,7 @@ test("ribbon stays hidden through the loading splash and after attach", async ({
   expect(await ribbonVisible(page)).toBe(false);
 });
 
-test("ribbon reveals on tap-to-focus engagement and hides again on keyboard dismissal (#201)", async ({
+test("single tap reveals and synchronously focuses composer, then dismissal hides it (#201)", async ({
   page,
 }) => {
   await page.goto(`${APP}#/s/${encodeURIComponent(SEED)}`, {
@@ -1187,10 +1201,16 @@ test("ribbon reveals on tap-to-focus engagement and hides again on keyboard dism
   await expect.poll(() => loadquoteGone(page), { timeout: 5000 }).toBe(true);
   expect(await ribbonVisible(page)).toBe(false);
 
-  // Engage: double-tap the terminal, exactly like a phone user tapping to
-  // type. This is the "way in" that must exist while the bar starts hidden.
-  await doubleTapOverlay(page);
-  await expect.poll(() => ribbonVisible(page), { timeout: 1000 }).toBe(true);
+  // Engage: ONE stationary tap must reveal and focus the real native composer
+  // before the touchend task returns. Headless Chromium cannot display Gboard,
+  // but synchronous activeElement is the browser contract Android uses to
+  // authorize opening the software keyboard from that same gesture.
+  await singleTapOverlay(page);
+  expect(await ribbonVisible(page)).toBe(true);
+  expect(
+    await page.evaluate(() => document.activeElement?.id || null),
+    "single tap must synchronously focus #inputText",
+  ).toBe("inputText");
 
   // Dismiss: keyboard opens then closes — the bar must hide again, same as
   // it already did before #198/#201 (input-bar.js's visualViewport handler).

@@ -327,9 +327,10 @@ export function createTerminal({
     onTwoPullEnd: twoPullEnd,
 
     onTap(x, y) {
-      // Detect URLs in terminal text at tap position and open them.
+      // Detect URLs in terminal text at tap position and open them first.
       // WebLinksAddon uses hover-based links which don't work on mobile,
-      // so we read the buffer text directly.
+      // so we read the buffer text directly. A URL tap must never also summon
+      // the keyboard.
       const cell = core.cellSize();
       const rect = termEl.getBoundingClientRect();
       const col = Math.floor((x - rect.left) / cell.width);
@@ -337,24 +338,29 @@ export function createTerminal({
       const buffer = core.getActiveBuffer();
       const bufferRow = buffer.viewportY + row;
       const line = buffer.getLine(bufferRow);
-      if (!line) return;
-      const text = line.translateToString(true);
-      const urlRe = /https?:\/\/[^\s)"'>]+/g;
-      let match;
-      while ((match = urlRe.exec(text)) !== null) {
-        if (col >= match.index && col < match.index + match[0].length) {
-          openExternal(match[0]);
-          return;
+      if (line) {
+        const text = line.translateToString(true);
+        const urlRe = /https?:\/\/[^\s)"'>]+/g;
+        let match;
+        while ((match = urlRe.exec(text)) !== null) {
+          if (col >= match.index && col < match.index + match[0].length) {
+            openExternal(match[0]);
+            return;
+          }
         }
       }
+
+      // A genuine stationary single tap means "type here" on mobile. Snap to
+      // the live prompt, reveal the composer, and focus it synchronously while
+      // the browser still owns the user-activation gesture so Android opens
+      // Gboard on this first tap. Swipes/long-press/pinch never reach onTap.
+      core.scrollToBottom();
+      ensureInputBar().show();
     },
 
     onDoubleTap() {
-      // This handler is wired on the touch overlay, so a double-tap here always
-      // comes from a touch device — exactly the case that wants the on-screen
-      // input bar. Lazily create it on first activation so a device that loaded
-      // as non-mobile (or just rotated into touch mode) still gets the bar
-      // instead of being stuck with no keyboard affordance.
+      // Backward-compatible idempotent path. The first tap has already shown
+      // and focused the composer; a second tap does not change state.
       ensureInputBar().show();
     },
 
@@ -377,8 +383,8 @@ export function createTerminal({
   // read — the same "showed once, now permanently in the way" problem #198
   // was trying to avoid, just moved earlier. Splash dismissal is not an
   // input event; the ribbon stays hidden through it and only reveals on
-  // actual engagement (tap-to-focus — see the `onDoubleTap` handlers below
-  // and in the reader's gesture wiring), same as it already hides on
+  // actual engagement (single tap-to-focus in the terminal; reader gesture
+  // wiring routes through showInputBar), same as it already hides on
   // keyboard dismissal (input-bar.js's visualViewport handler).
   let revealScheduled = false;
   function scheduleReveal() {
@@ -411,7 +417,7 @@ export function createTerminal({
   // may mount as non-mobile and later become touch-primary (rotation, an
   // attached/detached input device, a misreported initial pointer query). So
   // we don't gate creation on it — we create the bar lazily on first use
-  // (double-tap / activate), and also (re)evaluate when the pointer modality
+  // (single tap / activate), and also (re)evaluate when the pointer modality
   // changes. Either path funnels through `ensureInputBar()`, which is
   // idempotent.
   let inputBar = null;
@@ -424,8 +430,8 @@ export function createTerminal({
 
   // If we already look like a touch device, mount eagerly so the mic button
   // (and the full control-key ribbon) exist and are wired from the start —
-  // but stay hidden. The bar only reveals on engagement: the `onDoubleTap`
-  // handlers below (xterm overlay; the reader via showInputBar) call
+  // but stay hidden. The bar only reveals on engagement: terminal single-tap
+  // activation (or the reader via showInputBar) calls
   // `ensureInputBar().show()`,
   // which is the only path that unhides it (#201). Mounting without revealing
   // keeps `ensureInputBar()` idempotent and the mic button wired the moment a

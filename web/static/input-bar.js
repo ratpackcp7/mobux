@@ -332,8 +332,14 @@ export function createInputBar(engine, send, node = '') {
 
   function activateInput() {
     show();
-    // Small delay so the bar renders before focusing (avoids layout jump)
-    setTimeout(() => input.focus(), 50);
+    // Android only opens the soft keyboard reliably when focus happens inside
+    // the same user gesture. Deferring focus loses that activation token and
+    // turns tap-to-type into an accidental double-tap flow.
+    try {
+      input.focus({ preventScroll: true });
+    } catch (_) {
+      input.focus();
+    }
   }
 
   // ── Auto-hide bar when the keyboard dismisses ─────────────────────
@@ -433,8 +439,8 @@ export function createInputBar(engine, send, node = '') {
     _computeLiveEdit: computeLiveEdit,
     getMode: () => mode,
     setMode,
-    // show() — show the bar AND focus the text input (the double-tap /
-    // engagement path — see terminal.js's `onDoubleTap` handlers, #201).
+    // show() — show the bar AND synchronously focus the text input (the
+    // single-tap engagement path in terminal.js, #201).
     show: activateInput,
     hide,
     // Full teardown for a same-document engine remount: everything wired
