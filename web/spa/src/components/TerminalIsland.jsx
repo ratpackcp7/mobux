@@ -200,6 +200,7 @@ export function TerminalIsland({ node, session }) {
       const { reader, readMode } = viewCtl;
       window.__mobuxView = {
         swap: (mode) => viewCtl.swap(mode),
+        showInputBar: () => engine.showInputBar(),
         get current() {
           return viewCtl.current;
         },
@@ -386,16 +387,35 @@ export function TerminalIsland({ node, session }) {
         </div>
         <div id="inputToast" class="mobux-attach-error" />
         <div class="input-row">
+          <button
+            id="inputModeToggle"
+            type="button"
+            class="input-mode-toggle"
+            aria-pressed="false"
+            aria-label="Switch input mode"
+            title="Toggle Compose/Live"
+          >
+            Compose
+          </button>
           <input
             id="inputText"
-            type="text"
+            type="search"
+            role="searchbox"
+            aria-label="Terminal input"
+            inputmode="text"
             enterkeyhint="send"
             placeholder="Type here…"
             autocomplete="off"
             autocorrect="on"
             autocapitalize="off"
             spellcheck={false}
+            data-form-type="other"
+            data-lpignore="true"
+            name="mobux-composer"
           />
+          <button id="inputExpandBtn" type="button" class="input-expand" aria-expanded="false" aria-label="Expand controls" title="Expand controls">
+            ▾
+          </button>
           <button id="inputSend" class="input-send" title="Send without Enter">
             ▶
           </button>

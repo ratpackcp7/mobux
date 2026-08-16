@@ -6,9 +6,12 @@
 // - Ribbon buttons send control chars / escape sequences directly to PTY
 // - Text input: native keyboard with autocomplete/voice. Enter sends + clears.
 // - Bar appears on tap, hides when keyboard dismisses.
+// - Compose <-> Live mode: Compose buffers locally, Live streams diff to PTY.
+//
 
 import { createAttachAction, createDictateAction } from './input-actions.js';
 import telemetry from './telemetry.js';
+import { computeLiveEdit, getStoredInputMode, setStoredInputMode, INPUT_MODE_DEFAULT } from './input-mode.js';
 
 export function createInputBar(engine, send, node = '') {
   const bar = document.getElementById('inputBar');
@@ -17,13 +20,143 @@ export function createInputBar(engine, send, node = '') {
   const sendBtn = document.getElementById('inputSend');
   // Complete no-op shape: callers invoke .show()/.hide(), so a partial stub
   // would throw. Mirror the real public API below.
-  if (!bar || !input) return { show() {}, hide() {}, destroy() {} };
+  if (!bar || !input) return { show() {}, hide() {}, destroy() {}, getMode() { return INPUT_MODE_DEFAULT; }, _computeKeyboardOffset: null };
 
   // ── Disable the renderer's native input on mobile ─────────────────
   // We own input now. Tell the renderer to release its native input surface
   // so it can't steal focus / pop the soft keyboard (R15). The engine routes
   // this to the live adapter — the input bar never touches renderer internals.
   engine.setNativeInputEnabled(false);
+
+  // ── Input mode (Compose <-> Live) ──────────────────────────────────
+  let mode = getStoredInputMode(); // 'compose' | 'live'
+  let shadow = ""; // Live mode: text already reflected to PTY
+  let composeRemoteShadow = ""; // reflected base when Live falls/switches to Compose
+  let isComposing = false;
+  let ribbonExpanded = false;
+  let liveFallbackReason = "";
+
+  const modeToggle = document.getElementById('inputModeToggle');
+  const expandBtn = document.getElementById('inputExpandBtn');
+
+  function reflectMode() {
+    if (modeToggle) {
+      const fallback = mode === "compose" && !!liveFallbackReason;
+      modeToggle.textContent = fallback ? "Compose!" : mode === "live" ? "Live" : "Compose";
+      modeToggle.setAttribute("aria-pressed", mode === "live" ? "true" : "false");
+      modeToggle.setAttribute(
+        "aria-label",
+        fallback
+          ? `Compose mode. Live paused: ${liveFallbackReason}`
+          : mode === "live"
+            ? "Switch to Compose mode"
+            : "Switch to Live mode",
+      );
+      modeToggle.title = fallback
+        ? `Live paused: ${liveFallbackReason}. Edit safely in Compose, then send.`
+        : mode === "live"
+          ? "Live: native edits stream to terminal"
+          : "Compose: edit locally, Enter to send";
+    }
+    bar.setAttribute("data-input-mode", mode);
+    bar.toggleAttribute("data-live-fallback", mode === "compose" && !!liveFallbackReason);
+  }
+  reflectMode();
+
+  function fallbackToCompose(reason) {
+    composeRemoteShadow = shadow;
+    liveFallbackReason = reason || "edit could not be mapped safely";
+    mode = "compose";
+    setStoredInputMode(mode);
+    reflectMode();
+  }
+
+  function setMode(next) {
+    if ((next !== "compose" && next !== "live") || next === mode) return true;
+
+    if (next === "live") {
+      // Compose may contain text that has not reached the PTY yet. Reconcile it
+      // exactly once before declaring it reflected by Live.
+      const seq = computeLiveEdit(composeRemoteShadow, input.value);
+      if (seq === null) {
+        liveFallbackReason = "current text cannot be mapped safely to Live";
+        reflectMode();
+        try { input.focus(); } catch (_) {}
+        return false;
+      }
+      if (seq) send(seq);
+      shadow = input.value;
+      composeRemoteShadow = "";
+      liveFallbackReason = "";
+      mode = "live";
+    } else {
+      // Preserve the native text while remembering what Live already reflected,
+      // so Compose Enter/inject sends only the still-pending edit, never a
+      // duplicate copy of the line.
+      composeRemoteShadow = shadow;
+      liveFallbackReason = "";
+      mode = "compose";
+    }
+
+    setStoredInputMode(mode);
+    reflectMode();
+    try { input.focus(); } catch (_) {}
+    return true;
+  }
+
+  if (modeToggle) {
+    modeToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      setMode(mode === "compose" ? "live" : "compose");
+    });
+    modeToggle.addEventListener("mousedown", (e) => e.preventDefault());
+  }
+
+  // ── Ribbon expand/collapse (compact chrome R6) ─────────────────────
+  function reflectRibbon() {
+    if (ribbon) {
+      if (ribbonExpanded) {
+        ribbon.classList.remove("input-ribbon--collapsed");
+      } else {
+        ribbon.classList.add("input-ribbon--collapsed");
+      }
+    }
+    if (expandBtn) {
+      expandBtn.textContent = ribbonExpanded ? "▴" : "▾";
+      expandBtn.setAttribute("aria-expanded", ribbonExpanded ? "true" : "false");
+      expandBtn.setAttribute("aria-label", ribbonExpanded ? "Collapse controls" : "Expand controls");
+    }
+  }
+
+  // Default: collapsed when keyboard is open (compact). When bar is hidden,
+  // expanded state resets? Spec says expanded need not persist across sessions,
+  // but we keep it per mount. Collapse by default on keyboard open.
+  ribbonExpanded = false;
+  reflectRibbon();
+
+  if (expandBtn) {
+    expandBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      ribbonExpanded = !ribbonExpanded;
+      reflectRibbon();
+      // Re-measure terminal after chrome height changes
+      resizeTerminal();
+      try { input.focus(); } catch (_) {}
+    });
+    expandBtn.addEventListener("mousedown", (e) => e.preventDefault());
+  }
+
+  // When keyboard opens, default to collapsed if not already expanded.
+  // We detect keyboard open via visualViewport height shrink (handled in
+  // terminal.js), but also listen here to collapse. Simpler: on show(), collapse.
+  const origShow = () => {
+    bar.classList.remove('hidden');
+    // Collapse ribbon by default to keep chrome <= 56px
+    if (!ribbonExpanded) {
+      ribbon?.classList.add("input-ribbon--collapsed");
+    }
+    resizeTerminal();
+  };
 
   // ── Parse escape sequences from data-key attributes ───────────────
   function parseKey(raw) {
@@ -39,8 +172,7 @@ export function createInputBar(engine, send, node = '') {
   // (#terminal / #reader); fire a synchronous resize so the engine
   // and reader recompute their bounds in the same task.
   function show() {
-    bar.classList.remove('hidden');
-    resizeTerminal();
+    origShow();
   }
 
   function hide() {
@@ -52,6 +184,9 @@ export function createInputBar(engine, send, node = '') {
     // to 100vh and re-cover the keyboard space.
     input.blur();
     resizeTerminal();
+    // Reset expanded state on hide so next keyboard-open is compact again
+    ribbonExpanded = false;
+    reflectRibbon();
   }
 
   function computeKeyboardOffset(innerHeight, vvHeight, vvOffsetTop) {
@@ -83,29 +218,119 @@ export function createInputBar(engine, send, node = '') {
   // Don't preventDefault touchstart — it kills ribbon scrolling.
   // Instead, prevent focus steal via mousedown only.
 
-  // ── Text input: two send modes ────────────────────────────────────
-  // Keyboard Enter: send text + \r (execute in shell)
-  // Green button: send text WITHOUT \r (inject into readline, still editable)
+  // ── Text input: Compose vs Live ───────────────────────────────────
+  function clearComposerState() {
+    input.value = '';
+    shadow = "";
+    composeRemoteShadow = "";
+    liveFallbackReason = "";
+    reflectMode();
+  }
+
+  function composePendingBytes(text) {
+    if (!composeRemoteShadow) return text;
+    return computeLiveEdit(composeRemoteShadow, text);
+  }
+
+  function sendCompose(execute) {
+    const text = input.value;
+    const seq = composePendingBytes(text);
+    if (seq === null) {
+      liveFallbackReason = "pending edit is still unsafe to map; shorten or simplify it";
+      reflectMode();
+      return false;
+    }
+    if (seq) send(seq);
+    if (execute) send('\r');
+    clearComposerState();
+    return true;
+  }
+
   function sendAndExecute() {
     const text = input.value;
-    if (text) send(text);
+    if (mode === "compose") {
+      sendCompose(true);
+      return;
+    }
+
+    if (text !== shadow) {
+      const seq = computeLiveEdit(shadow, text);
+      if (seq === null) {
+        fallbackToCompose("edit could not be mapped safely");
+        return;
+      }
+      if (seq) send(seq);
+      shadow = text;
+    }
     send('\r');
-    input.value = '';
+    clearComposerState();
   }
 
   function sendWithoutEnter() {
     const text = input.value;
-    if (text) send(text);
-    input.value = '';
+    if (mode === "compose") {
+      sendCompose(false);
+      input.focus();
+      return;
+    }
+
+    if (text !== shadow) {
+      const seq = computeLiveEdit(shadow, text);
+      if (seq === null) {
+        fallbackToCompose("edit could not be mapped safely");
+        input.focus();
+        return;
+      }
+      if (seq) send(seq);
+      shadow = text;
+    }
+    clearComposerState();
     input.focus();
   }
 
+  // Live mode: shadow/diff bridge over native composer.
+  // We listen to `input` events (post-composition) and `compositionend`.
+  input.addEventListener("compositionstart", () => {
+    isComposing = true;
+  });
+  input.addEventListener("compositionend", () => {
+    isComposing = false;
+    if (mode !== "live") return;
+    const newVal = input.value;
+    if (newVal === shadow) return;
+    const seq = computeLiveEdit(shadow, newVal);
+    if (seq === null) {
+      fallbackToCompose("composition edit could not be mapped safely");
+      return;
+    }
+    if (seq) send(seq);
+    shadow = newVal;
+  });
+
+  input.addEventListener("input", () => {
+    if (mode !== "live" || isComposing) return;
+    const newVal = input.value;
+    if (newVal === shadow) return;
+    const seq = computeLiveEdit(shadow, newVal);
+    if (seq === null) {
+      fallbackToCompose("edit could not be mapped safely");
+      return;
+    }
+    if (seq) send(seq);
+    shadow = newVal;
+  });
+
+  // Handle Enter, Escape, and paste/IME deduplication is covered by input event above.
+  // Enter must not trigger input diff double-send.
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       sendAndExecute();
     }
   });
+
+  // Paste: let input event handle Live diff; Compose just buffers.
+  // Ensure we don't duplicate: no direct send on paste event.
 
   sendBtn.addEventListener('click', (e) => {
     e.preventDefault();
@@ -217,6 +442,9 @@ export function createInputBar(engine, send, node = '') {
   // ── Public API ────────────────────────────────────────────────────
   return {
     _computeKeyboardOffset: computeKeyboardOffset,
+    _computeLiveEdit: computeLiveEdit,
+    getMode: () => mode,
+    setMode,
     // show() — show the bar AND focus the text input (the double-tap /
     // engagement path — see terminal.js's `onDoubleTap` handlers, #201).
     show: activateInput,

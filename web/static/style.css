@@ -1266,15 +1266,23 @@ h1, h2, h3 { margin: 0; }
   50%      { box-shadow: 0 0 0 3px rgba(255, 80, 80, 0.55); }
 }
 
+/* ── One coherent geometry model: flex siblings, no double-count ───
+   #terminal and #inputBar are adjacent flex children. `body.term-body` is
+   the ONLY viewport-height owner (100dvh normally; visualViewport height +
+   offsetTop while the keyboard is open). The SPA subtree consumes that flex
+   space; it must not independently claim another 100dvh. */
 .input-row {
   display: flex;
   padding: 4px 6px 6px;
   gap: 6px;
+  align-items: center;
+  min-height: 50px; /* 40px controls + 10px vertical padding; compact gate <=56px */
+  box-sizing: border-box;
 }
 
 .input-row input {
   flex: 1;
-  height: 36px;
+  height: 40px;
   border: 1px solid #444;
   border-radius: 6px;
   background: #0f1115;
@@ -1283,14 +1291,54 @@ h1, h2, h3 { margin: 0; }
   font-family: monospace;
   padding: 0 10px;
   outline: none;
+  min-width: 0;
 }
 .input-row input:focus {
   border-color: #6a9;
 }
 
+.input-mode-toggle {
+  flex: 0 0 auto;
+  min-width: 72px;
+  height: 40px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1e222a;
+  color: #c8ccd4;
+  font-size: 12px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  padding: 0 8px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  /* Compact but deliberate phone hit target: 40px tall, 72px wide */
+}
+.input-mode-toggle[aria-pressed="true"] {
+  background: #2a3a4a;
+  border-color: #5a7a9e;
+  color: #e0e8f0;
+}
+.input-mode-toggle:active {
+  background: #2e333d;
+}
+
+.input-expand {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1e222a;
+  color: #c8ccd4;
+  font-size: 14px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.input-expand:active { background: #2e333d; }
+
 .input-send {
   width: 44px;
-  height: 36px;
+  height: 40px;
   border: 1px solid #444;
   border-radius: 6px;
   background: #2a5a3a;
@@ -1301,6 +1349,13 @@ h1, h2, h3 { margin: 0; }
 }
 .input-send:active {
   background: #3a7a4a;
+}
+
+/* Compact keyboard-open chrome (R6): ribbon collapsed by default. Removing
+   this class is the explicit expand action; the ribbon's base flex rule then
+   becomes visible again. */
+.input-ribbon--collapsed {
+  display: none !important;
 }
 
 /* ── /install page ────────────────────────────────────────────────── */

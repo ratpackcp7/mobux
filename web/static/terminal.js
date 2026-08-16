@@ -777,38 +777,47 @@ export function createTerminal({
     core.intentionalClose = true;
   });
 
-  // ── Soft keyboard (visualViewport) handler ──────────────────────────
-  // Renderer-agnostic. On Android Chrome (the TWA target) the soft
-  // keyboard does NOT shrink the layout viewport — `window.innerHeight`
-  // and the `100vh`/`100dvh` units used by `.term-body` stay at full
-  // screen — but `window.visualViewport.height` does shrink. Without
-  // this handler the bottom rows of the terminal (typically the tmux
-  // status line + active prompt) end up rendered behind the keyboard.
-  //
-  // We shrink the body to the visual viewport height so the flex
-  // children (#terminal, #reader, #inputBar) reflow into the visible
-  // area. Then we dispatch a `resize` so both backends recompute their
-  // (cols, rows) from the new host clientHeight. input-bar.js still
-  // owns its show/hide auto-restore on viewport grow-back — this handler
-  // only handles the body height tracking, which must work whether the
-  // input bar is mounted or not (the bug also reproduces when the
-  // renderer's native textarea gets focus directly).
+  // ── Soft keyboard / geometry handler (R5: one source of truth) ───
+  // Single source: visualViewport.height + flex layout. No transforms,
+  // no padding reservations, no double-counted offsets. Body height is
+  // the sole height signal; #terminal/#inputBar are adjacent flex
+  // siblings with no gap. On any viewport change we remeasure the
+  // terminal after layout so PTY rows/cols match visible area.
+  // When keyboard closes, inline height is cleared — no stale spacer.
   if (window.visualViewport) {
     const vv = window.visualViewport;
     let lastH = vv.height;
     const trackKeyboard = () => {
       const shrunk = vv.height < window.innerHeight - 1;
+      // Single source of truth: body height = visualViewport height when
+      // keyboard shrinks viewport, otherwise clear to let 100dvh flex win.
       document.body.style.height = shrunk ? `${vv.height}px` : "";
+      document.body.style.top = shrunk ? `${vv.offsetTop}px` : "";
+      // Also reflect compact state on body for CSS hooks if needed
+      if (shrunk) document.body.classList.add("keyboard-open");
+      else document.body.classList.remove("keyboard-open");
       if (Math.abs(vv.height - lastH) > 0.5) {
         lastH = vv.height;
-        // Synchronous resize so both backends recompute cols/rows from
-        // the freshly-laid-out host height in the same task — no visible
-        // jump on the next frame.
-        window.dispatchEvent(new Event("resize"));
+        // Use rAF + sync resize so host box has laid out before measuring
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("resize"));
+          // Second tick for engines that need two frames (Sterk measured)
+          requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+        });
       }
     };
     on(vv, "resize", trackKeyboard);
     on(vv, "scroll", trackKeyboard);
+    // Initial check in case keyboard is already open on mount
+    trackKeyboard();
+    cleanups.push(() => {
+      document.body.style.height = "";
+      document.body.style.top = "";
+      document.body.classList.remove("keyboard-open");
+    });
+  } else {
+    // Fallback: window resize still triggers engine remeasure
+    on(window, "resize", () => {});
   }
 
   // ── Tap-to-snap-to-bottom ───────────────────────────────────────────
