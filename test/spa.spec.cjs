@@ -1449,19 +1449,13 @@ test("telemetry overlay only renders with ?telemetry=1", async ({ page }) => {
 // ── mobile mic button: hidden on mount, reachable via tap-to-focus (#201) ───
 //
 // Regression guard for the "mobile microphone button completely gone" bug
-// introduced in v0.6.0 (SPA cutover). Before that fix, #micBtn lived inside
-// #inputBar which started with class `hidden` (display:none) and stayed that
-// way forever — a zero bounding rect with no discoverable way to activate it.
-//
-// #198 fixed the "no way in" half by having the bar mount eagerly, but also
-// made it auto-reveal on splash dismissal, which #201 reverts: the bar mounts
-// eagerly (mic button exists and is wired) but starts hidden, same as splash
-// dismissal, attach, and everything up to the first tap. What must still hold
-// is the "discoverable way to activate it" half of the original fix — tap-to-
-// focus (double-tap the terminal) is that way in. This test FAILS if the bar
-// never reveals (the pre-#198 bug) or if it's already visible before any
-// engagement (the #201 regression), and PASSES when it's hidden until the
-// double-tap, then visible and wired.
+// introduced in v0.6.0 (SPA cutover). The input bar now stays mounted and
+// focusable while visually hidden so Android can grant the software keyboard
+// from the first terminal tap. Therefore "hidden" is a user-visible/layout
+// contract, not a zero-size DOM contract: the bar must be off-screen,
+// transparent, pointer-disabled, and consume no terminal flex space until a
+// stationary single tap reveals it. The mic button must already exist and be
+// wired inside that mounted bar.
 test("mobile #micBtn stays hidden until tap-to-focus, then reveals and wires the dictation flow", async ({
   page,
 }) => {
@@ -1485,18 +1479,46 @@ test("mobile #micBtn stays hidden until tap-to-focus, then reveals and wires the
   //    wired by the eager mobile mount) ...
   await expect(page.locator("#micBtn")).toHaveCount(1);
 
-  // 2. ... but stay computed-hidden (inside #inputBar's display:none) until
-  //    engagement. getBoundingClientRect() returns all-zeros for hidden
-  //    elements.
-  const hiddenRect = await page.locator("#micBtn").evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return { width: r.width, height: r.height };
+  // 2. ... but remain visually absent and consume zero terminal layout space
+  //    until engagement. Its child controls retain dimensions intentionally so
+  //    #inputText is focusable at gesture start on Android.
+  const hiddenState = await page.evaluate(() => {
+    const bar = document.getElementById("inputBar");
+    const mic = document.getElementById("micBtn");
+    const term = document.getElementById("terminal");
+    const bs = getComputedStyle(bar);
+    const br = bar.getBoundingClientRect();
+    const mr = mic.getBoundingClientRect();
+    const tr = term.getBoundingClientRect();
+    return {
+      hiddenClass: bar.classList.contains("hidden"),
+      opacity: bs.opacity,
+      pointerEvents: bs.pointerEvents,
+      position: bs.position,
+      barTop: br.top,
+      micWidth: mr.width,
+      micHeight: mr.height,
+      terminalBottom: tr.bottom,
+      viewportHeight: innerHeight,
+    };
   });
-  expect(hiddenRect.width, "#micBtn must start hidden (width 0)").toBe(0);
-  expect(hiddenRect.height, "#micBtn must start hidden (height 0)").toBe(0);
+  expect(hiddenState.hiddenClass).toBe(true);
+  expect(hiddenState.opacity).toBe("0");
+  expect(hiddenState.pointerEvents).toBe("none");
+  expect(hiddenState.position).toBe("absolute");
+  expect(hiddenState.barTop, "hidden bar must sit outside the viewport").toBeGreaterThanOrEqual(
+    hiddenState.viewportHeight,
+  );
+  expect(hiddenState.micWidth, "mounted mic keeps real dimensions").toBeGreaterThan(0);
+  expect(hiddenState.micHeight, "mounted mic keeps real dimensions").toBeGreaterThan(0);
+  expect(
+    Math.abs(hiddenState.terminalBottom - hiddenState.viewportHeight),
+    "hidden bar must consume zero terminal flex space",
+  ).toBeLessThanOrEqual(1.5);
+  expect(await ribbonVisible(page)).toBe(false);
 
-  // 3. Tap-to-focus is the discoverable way in: double-tap the terminal.
-  await doubleTapOverlay(page);
+  // 3. Tap-to-focus is the discoverable way in: ONE tap on the terminal.
+  await singleTapOverlay(page);
   await expect.poll(() => ribbonVisible(page), { timeout: 1000 }).toBe(true);
 
   const rect = await page.locator("#micBtn").evaluate((el) => {
