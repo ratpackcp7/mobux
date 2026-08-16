@@ -35,6 +35,7 @@ const PREF_DEFAULTS = {
   listen_rate: 1.0,
   listen_pitch: 1.0,
   selected_node: "",
+  mobile_input_mode: "compose",
 };
 
 exports.test = base.test.extend({

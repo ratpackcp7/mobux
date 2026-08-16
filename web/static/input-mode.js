@@ -1,5 +1,9 @@
 // ── Input Mode Diff Bridge ────────────────────────────────────────────────
-// Pure Live-mode shadow/diff logic. No DOM side effects; caller owns shadow.
+// Pure Live-mode shadow/diff logic plus server-held mode preference access.
+// Mobux intentionally keeps durable UI state on the server; prefs.js is the
+// single server-synced client state authority.
+
+import * as prefs from './prefs.js';
 
 const BS = "\x7f";
 const LEFT = "\x1b[D";
@@ -76,21 +80,18 @@ export function computeLiveEdit(oldShadow, newValue) {
   return seq;
 }
 
-export const INPUT_MODE_KEY = "mobux:inputMode";
+export const INPUT_MODE_KEY = "mobile_input_mode";
 export const INPUT_MODE_DEFAULT = "compose";
 
 export function getStoredInputMode() {
-  try {
-    const value = localStorage.getItem(INPUT_MODE_KEY);
-    if (value === "live" || value === "compose") return value;
-  } catch (_) {}
-  return INPUT_MODE_DEFAULT;
+  const value = prefs.get(INPUT_MODE_KEY);
+  return value === "live" ? "live" : INPUT_MODE_DEFAULT;
 }
 
 export function setStoredInputMode(mode) {
   const normalized = mode === "live" ? "live" : "compose";
-  try {
-    localStorage.setItem(INPUT_MODE_KEY, normalized);
-  } catch (_) {}
+  // prefs.set applies synchronously in-memory and serializes its server PUT.
+  // Mode switching must not block keyboard interaction on network latency.
+  void prefs.set(INPUT_MODE_KEY, normalized);
   return normalized;
 }

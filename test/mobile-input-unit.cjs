@@ -3,7 +3,14 @@ const assert = require('assert');
 const path = require('path');
 
 async function loadInputMode() {
-  const src = fs.readFileSync(path.join(__dirname, '../web/static/input-mode.js'), 'utf8');
+  let src = fs.readFileSync(path.join(__dirname, '../web/static/input-mode.js'), 'utf8');
+  // Pure diff tests do not need network/server prefs. Replace only the static
+  // module import with a tiny in-memory prefs contract so the ESM can load from
+  // a data URL under Node's CommonJS package default.
+  src = src.replace(
+    "import * as prefs from './prefs.js';",
+    "const prefs = { get: () => 'compose', set: () => Promise.resolve() };",
+  );
   const url = 'data:text/javascript;base64,' + Buffer.from(src).toString('base64');
   return import(url);
 }

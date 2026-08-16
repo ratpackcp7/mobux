@@ -16,6 +16,7 @@ const FALLBACK = {
   listen_rate: 1.0,
   listen_pitch: 1.0,
   selected_node: "",
+  mobile_input_mode: "compose",
 };
 
 export function getPref(key) {

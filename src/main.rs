@@ -1444,6 +1444,12 @@ struct UiPrefsJson {
     listen_pitch: f64,
     #[serde(default)]
     selected_node: String,
+    #[serde(default = "default_mobile_input_mode")]
+    mobile_input_mode: String,
+}
+
+fn default_mobile_input_mode() -> String {
+    "compose".to_string()
 }
 
 impl From<db::UiPreferences> for UiPrefsJson {
@@ -1474,6 +1480,11 @@ impl From<db::UiPreferences> for UiPrefsJson {
             listen_rate: p.listen_rate.clamp(0.5, 2.0),
             listen_pitch: p.listen_pitch.clamp(0.5, 2.0),
             selected_node: p.selected_node,
+            mobile_input_mode: if p.mobile_input_mode == "live" {
+                "live".to_string()
+            } else {
+                "compose".to_string()
+            },
         }
     }
 }
@@ -1497,6 +1508,12 @@ impl UiPrefsJson {
                 self.default_view
             ));
         }
+        if self.mobile_input_mode != "compose" && self.mobile_input_mode != "live" {
+            return Err(format!(
+                "invalid mobile_input_mode {:?}: must be \"compose\" or \"live\"",
+                self.mobile_input_mode
+            ));
+        }
         Ok(db::UiPreferences {
             renderer: self.renderer,
             theme: self.theme,
@@ -1506,6 +1523,11 @@ impl UiPrefsJson {
             listen_rate: self.listen_rate.clamp(0.5, 2.0),
             listen_pitch: self.listen_pitch.clamp(0.5, 2.0),
             selected_node: self.selected_node,
+            mobile_input_mode: if self.mobile_input_mode == "live" {
+                "live".to_string()
+            } else {
+                "compose".to_string()
+            },
         })
     }
 }
@@ -3101,6 +3123,7 @@ mod tests {
             listen_rate: 1.0,
             listen_pitch: 1.0,
             selected_node: String::new(),
+            mobile_input_mode: "compose".to_string(),
         };
         let err = bad.validate().expect_err("bogus renderer must be rejected");
         assert!(
@@ -3120,12 +3143,35 @@ mod tests {
             listen_rate: 1.0,
             listen_pitch: 1.0,
             selected_node: String::new(),
+            mobile_input_mode: "compose".to_string(),
         };
         let err = bad
             .validate()
             .expect_err("bogus default_view must be rejected");
         assert!(
             err.contains("default_view"),
+            "error should name the field: {err}"
+        );
+    }
+
+    #[test]
+    fn set_ui_preferences_rejects_invalid_mobile_input_mode() {
+        let bad = UiPrefsJson {
+            renderer: "xterm".to_string(),
+            theme: "nord".to_string(),
+            default_view: "xterm".to_string(),
+            osc133_hint_dismissed: false,
+            listen_voice: String::new(),
+            listen_rate: 1.0,
+            listen_pitch: 1.0,
+            selected_node: String::new(),
+            mobile_input_mode: "bogus".to_string(),
+        };
+        let err = bad
+            .validate()
+            .expect_err("bogus mobile input mode must be rejected");
+        assert!(
+            err.contains("mobile_input_mode"),
             "error should name the field: {err}"
         );
     }
@@ -3141,6 +3187,7 @@ mod tests {
             listen_rate: 99.0,  // out of range: clamped, not rejected
             listen_pitch: -5.0, // out of range: clamped, not rejected
             selected_node: "gpu-box".to_string(),
+            mobile_input_mode: "live".to_string(),
         }
         .validate()
         .expect("valid enums must be accepted");
@@ -3149,6 +3196,7 @@ mod tests {
         assert_eq!(ok.listen_rate, 2.0);
         assert_eq!(ok.listen_pitch, 0.5);
         assert_eq!(ok.selected_node, "gpu-box");
+        assert_eq!(ok.mobile_input_mode, "live");
     }
 
     #[test]
@@ -3162,6 +3210,7 @@ mod tests {
             listen_rate: 1.0,
             listen_pitch: 1.0,
             selected_node: String::new(),
+            mobile_input_mode: "compose".to_string(),
         }
         .validate()
         .expect("read must be accepted as a default_view");
@@ -3186,12 +3235,14 @@ mod tests {
             listen_rate: 500.0,
             listen_pitch: -500.0,
             selected_node: String::new(),
+            mobile_input_mode: "not-a-real-mode".to_string(),
         };
         let json: UiPrefsJson = corrupt.into();
         assert_eq!(json.renderer, "xterm");
         assert_eq!(json.default_view, "xterm");
         assert_eq!(json.listen_rate, 2.0);
         assert_eq!(json.listen_pitch, 0.5);
+        assert_eq!(json.mobile_input_mode, "compose");
     }
 
     // ── serve_static cache headers (regression guard for the frozen-module

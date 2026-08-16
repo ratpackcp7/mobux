@@ -111,6 +111,8 @@ pub struct UiPreferences {
     /// Stored verbatim; a since-removed node is reconciled to local by the
     /// client.
     pub selected_node: String,
+    /// Mobile composer input mode: `compose` (buffered) or `live` (shadow diff).
+    pub mobile_input_mode: String,
 }
 
 impl Default for UiPreferences {
@@ -124,6 +126,7 @@ impl Default for UiPreferences {
             listen_rate: 1.0,
             listen_pitch: 1.0,
             selected_node: String::new(),
+            mobile_input_mode: "compose".to_string(),
         }
     }
 }
@@ -238,6 +241,9 @@ impl Db {
         // localStorage into this global row. Older DBs predate the column.
         let _ = conn.execute_batch(
             "ALTER TABLE ui_preferences ADD COLUMN selected_node TEXT NOT NULL DEFAULT '';",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE ui_preferences ADD COLUMN mobile_input_mode TEXT NOT NULL DEFAULT 'compose';",
         );
 
         // Migration: drop tables from the removed peer-relay feature
@@ -449,7 +455,8 @@ impl Db {
         let row: Option<UiPreferences> = conn
             .query_row(
                 "SELECT renderer, theme, default_view, osc133_hint_dismissed,
-                        listen_voice, listen_rate, listen_pitch, selected_node
+                        listen_voice, listen_rate, listen_pitch, selected_node,
+                        mobile_input_mode
                  FROM ui_preferences WHERE id = 1",
                 [],
                 |row| {
@@ -462,6 +469,7 @@ impl Db {
                         listen_rate: row.get(5)?,
                         listen_pitch: row.get(6)?,
                         selected_node: row.get(7)?,
+                        mobile_input_mode: row.get(8)?,
                     })
                 },
             )
@@ -489,8 +497,9 @@ impl Db {
         conn.execute(
             "INSERT INTO ui_preferences
                  (id, renderer, theme, default_view, osc133_hint_dismissed,
-                  listen_voice, listen_rate, listen_pitch, selected_node)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                  listen_voice, listen_rate, listen_pitch, selected_node,
+                  mobile_input_mode)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET
                  renderer = excluded.renderer,
                  theme = excluded.theme,
@@ -499,7 +508,8 @@ impl Db {
                  listen_voice = excluded.listen_voice,
                  listen_rate = excluded.listen_rate,
                  listen_pitch = excluded.listen_pitch,
-                 selected_node = excluded.selected_node",
+                 selected_node = excluded.selected_node,
+                 mobile_input_mode = excluded.mobile_input_mode",
             params![
                 prefs.renderer,
                 prefs.theme,
@@ -509,6 +519,7 @@ impl Db {
                 prefs.listen_rate,
                 prefs.listen_pitch,
                 prefs.selected_node,
+                prefs.mobile_input_mode,
             ],
         )?;
         Ok(())
@@ -1022,6 +1033,7 @@ mod tests {
         assert_eq!(defaults.listen_rate, 1.0);
         assert_eq!(defaults.listen_pitch, 1.0);
         assert_eq!(defaults.selected_node, "");
+        assert_eq!(defaults.mobile_input_mode, "compose");
 
         db.set_ui_preferences(UiPreferences {
             renderer: "sterk".to_string(),
@@ -1032,6 +1044,7 @@ mod tests {
             listen_rate: 1.4,
             listen_pitch: 0.8,
             selected_node: "gpu-box".to_string(),
+            mobile_input_mode: "live".to_string(),
         })
         .expect("write");
 
@@ -1044,6 +1057,7 @@ mod tests {
         assert_eq!(got.listen_rate, 1.4);
         assert_eq!(got.listen_pitch, 0.8);
         assert_eq!(got.selected_node, "gpu-box");
+        assert_eq!(got.mobile_input_mode, "live");
     }
 
     #[test]

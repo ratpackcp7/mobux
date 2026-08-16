@@ -109,12 +109,18 @@ test('mode toggle is accessible and persists without dropping focus', async ({ p
   await toggle.click();
   await expect(page.locator('#inputBar')).toHaveAttribute('data-input-mode', 'live');
   await expect(page.locator('#inputText')).toBeFocused();
-  expect(await page.evaluate(() => localStorage.getItem('mobux:inputMode'))).toBe('live');
+  await expect.poll(() => page.evaluate(() => window.__mobuxPrefs?.get('mobile_input_mode'))).toBe('live');
+  // Prove the async prefs write reached the server before testing fresh boot.
+  await expect.poll(async () => {
+    const resp = await page.request.get(`${BASE}/api/settings/preferences`);
+    return (await resp.json()).mobile_input_mode;
+  }, { timeout: 5000 }).toBe('live');
   await page.reload({ waitUntil: 'load' });
   await bootTerminal(page);
   await showComposer(page);
   await expect(page.locator('#inputBar')).toHaveAttribute('data-input-mode', 'live');
-  await page.evaluate(() => localStorage.setItem('mobux:inputMode', 'compose'));
+  await page.evaluate(() => window.__mobuxPrefs?.set('mobile_input_mode', 'compose'));
+  await expect.poll(() => page.evaluate(() => window.__mobuxPrefs?.get('mobile_input_mode'))).toBe('compose');
 });
 
 test('Compose buffers locally until Enter then clears', async ({ page }) => {
