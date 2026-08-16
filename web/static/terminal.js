@@ -807,7 +807,14 @@ export function createTerminal({
       }
       const keyboardDrop = closedH - vv.height;
       const keyboardThreshold = Math.max(96, closedH * 0.15);
-      const shrunk = !widthChanged && keyboardDrop >= keyboardThreshold;
+      // Support both Android viewport models:
+      // 1) layout viewport stays tall -> current innerHeight/vv gap proves it;
+      // 2) layout + visual viewport shrink together -> closed-baseline drop proves it.
+      const currentViewportGap = window.innerHeight - vv.height;
+      const currentGapThreshold = Math.max(96, window.innerHeight * 0.15);
+      const shrunk =
+        currentViewportGap >= currentGapThreshold ||
+        (!widthChanged && keyboardDrop >= keyboardThreshold);
       // Single source of truth: body height = visualViewport height when
       // keyboard shrinks viewport, otherwise clear to let 100dvh flex win.
       document.body.style.height = shrunk ? `${vv.height}px` : "";
