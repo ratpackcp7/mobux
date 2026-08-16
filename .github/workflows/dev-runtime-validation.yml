@@ -27,13 +27,23 @@ jobs:
           DEV_LOG_DIR: ${{ runner.temp }}/mobux-dev-logs
       - name: Verify dev listeners and HTTP
         shell: bash
+        env:
+          DEV_LOG_DIR: ${{ runner.temp }}/mobux-dev-logs
         run: |
           set -euo pipefail
           lsof -nP -iTCP:5152 -sTCP:LISTEN
           lsof -nP -iTCP:5173 -sTCP:LISTEN
-          curl --fail --silent --show-error --insecure --user dev:00000 https://127.0.0.1:5152/ >/dev/null
+          if curl --fail --silent --show-error --user dev:00000 http://127.0.0.1:5152/ >/dev/null 2>&1; then
+            backend_url='http://127.0.0.1:5152/'
+          elif curl --fail --silent --show-error --insecure --user dev:00000 https://127.0.0.1:5152/ >/dev/null 2>&1; then
+            backend_url='https://127.0.0.1:5152/'
+          else
+            echo 'backend listener did not answer HTTP or HTTPS' >&2
+            cat "$DEV_LOG_DIR/backend.log" >&2 || true
+            exit 1
+          fi
           curl --fail --silent --show-error http://127.0.0.1:5173/static/spa/ >/dev/null
-          echo 'DEV_RUNTIME backend=https://127.0.0.1:5152/ spa=http://127.0.0.1:5173/static/spa/'
+          echo "DEV_RUNTIME backend=${backend_url} spa=http://127.0.0.1:5173/static/spa/"
       - name: Stop dev backend and SPA
         if: always()
         run: |

@@ -24,4 +24,4 @@ This workflow and ADR are validation-only and must never be merged into the deli
 
 ## Acceptance
 
-The workflow must complete successfully with both `:5152` and `:5173` listening, successful backend/SPA probes, and cleanup showing both listeners stopped. The workflow parent must remain exact delivery commit `58779c9`.
+The workflow must complete successfully with both `:5152` and `:5173` listening, successful backend/SPA probes, and cleanup showing both listeners stopped. The backend probe must detect whether the dev target is serving HTTP or HTTPS instead of assuming a scheme; the first validation run already proved both listeners started but an HTTPS-only probe returned an empty reply. Feature source remains exact delivery commit `58779c9`; follow-up validation commits may change only this ADR/workflow.
