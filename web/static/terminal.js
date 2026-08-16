@@ -798,7 +798,11 @@ export function createTerminal({
       else document.body.classList.remove("keyboard-open");
       if (Math.abs(vv.height - lastH) > 0.5) {
         lastH = vv.height;
-        // Use rAF + sync resize so host box has laid out before measuring
+        // Reader/synthetic-scroll has a same-task bottom-pin contract: after
+        // the body geometry changes, one synchronous resize must let it measure
+        // the new host height immediately. Terminal renderers still get the
+        // deferred passes below after layout/paint settles.
+        window.dispatchEvent(new Event("resize"));
         requestAnimationFrame(() => {
           window.dispatchEvent(new Event("resize"));
           // Second tick for engines that need two frames (Sterk measured)

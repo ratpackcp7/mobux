@@ -1351,11 +1351,17 @@ h1, h2, h3 { margin: 0; }
   background: #3a7a4a;
 }
 
-/* Compact keyboard-open chrome (R6): ribbon collapsed by default. Removing
-   this class is the explicit expand action; the ribbon's base flex rule then
-   becomes visible again. */
-.input-ribbon--collapsed {
+/* Compact only while the soft keyboard is actually open. Outside this state
+   the legacy reader/view/control ribbon stays visible. The row's expand button
+   opts back in explicitly for the current keyboard-open session. */
+body.keyboard-open .input-ribbon:not(.input-ribbon--expanded) {
   display: none !important;
+}
+.input-expand {
+  display: none;
+}
+body.keyboard-open .input-expand {
+  display: block;
 }
 
 /* ── /install page ────────────────────────────────────────────────── */

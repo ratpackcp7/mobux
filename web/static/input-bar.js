@@ -113,14 +113,10 @@ export function createInputBar(engine, send, node = '') {
   }
 
   // ── Ribbon expand/collapse (compact chrome R6) ─────────────────────
+  // Preserve the legacy ribbon whenever the keyboard is closed. CSS collapses
+  // it only under body.keyboard-open unless this explicit expanded class is set.
   function reflectRibbon() {
-    if (ribbon) {
-      if (ribbonExpanded) {
-        ribbon.classList.remove("input-ribbon--collapsed");
-      } else {
-        ribbon.classList.add("input-ribbon--collapsed");
-      }
-    }
+    ribbon?.classList.toggle("input-ribbon--expanded", ribbonExpanded);
     if (expandBtn) {
       expandBtn.textContent = ribbonExpanded ? "▴" : "▾";
       expandBtn.setAttribute("aria-expanded", ribbonExpanded ? "true" : "false");
@@ -128,9 +124,6 @@ export function createInputBar(engine, send, node = '') {
     }
   }
 
-  // Default: collapsed when keyboard is open (compact). When bar is hidden,
-  // expanded state resets? Spec says expanded need not persist across sessions,
-  // but we keep it per mount. Collapse by default on keyboard open.
   ribbonExpanded = false;
   reflectRibbon();
 
@@ -146,15 +139,10 @@ export function createInputBar(engine, send, node = '') {
     expandBtn.addEventListener("mousedown", (e) => e.preventDefault());
   }
 
-  // When keyboard opens, default to collapsed if not already expanded.
-  // We detect keyboard open via visualViewport height shrink (handled in
-  // terminal.js), but also listen here to collapse. Simpler: on show(), collapse.
+  // Showing the bar preserves the legacy ribbon while the keyboard is closed.
+  // terminal.js toggles body.keyboard-open; CSS performs the compact collapse.
   const origShow = () => {
     bar.classList.remove('hidden');
-    // Collapse ribbon by default to keep chrome <= 56px
-    if (!ribbonExpanded) {
-      ribbon?.classList.add("input-ribbon--collapsed");
-    }
     resizeTerminal();
   };
 

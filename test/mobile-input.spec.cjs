@@ -213,11 +213,16 @@ test('unsafe Live edit preserves native value and visibly falls back to Compose'
 test('keyboard-open geometry has no dead strip, keeps last terminal area visible, and compact chrome <=56px', async ({ page }, testInfo) => {
   await bootTerminal(page);
   await showComposer(page);
+  await expect(page.locator('#inputRibbon')).toBeVisible();
+  await expect(page.locator('#inputExpandBtn')).toBeHidden();
   await keyboardLikeResize(page);
+  await expect(page.locator('#inputRibbon')).toBeHidden();
+  await expect(page.locator('#inputExpandBtn')).toBeVisible();
   const g = await geometry(page);
   const screenshot = testInfo.outputPath(`mobile-input-${testInfo.project.name}.png`);
   await page.screenshot({ path: screenshot, fullPage: false });
   testInfo.attachments.push({ name: 'keyboard-open', path: screenshot, contentType: 'image/png' });
+  console.log('MOBUX_GEOMETRY ' + JSON.stringify({ project: testInfo.project.name, screenshot, ...g }));
 
   expect(Math.abs(g.gap), `terminal→bar gap=${g.gap}px`).toBeLessThanOrEqual(1.5);
   expect(g.rowHeight, `compact row=${g.rowHeight}px`).toBeLessThanOrEqual(COMPACT_CHROME_MAX_PX);
@@ -226,6 +231,10 @@ test('keyboard-open geometry has no dead strip, keeps last terminal area visible
   expect(g.terminalRows).toBeGreaterThan(5);
   expect(g.bodyKeyboardOpen).toBe(true);
   expect(parseFloat(g.bodyHeightStyle)).toBeGreaterThan(0);
+
+  await page.locator('#inputExpandBtn').click();
+  await expect(page.locator('#inputRibbon')).toBeVisible();
+  await expect(page.locator('#inputExpandBtn')).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('keyboard close clears inline geometry state', async ({ page }) => {
