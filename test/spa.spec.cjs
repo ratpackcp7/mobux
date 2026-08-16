@@ -1065,8 +1065,21 @@ function ribbonVisible(page) {
   return page.evaluate(() => {
     const bar = document.getElementById("inputBar");
     if (!bar) return false;
+    const style = getComputedStyle(bar);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      Number.parseFloat(style.opacity || "1") <= 0
+    ) return false;
     const r = bar.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    return (
+      r.width > 0 &&
+      r.height > 0 &&
+      r.right > 0 &&
+      r.bottom > 0 &&
+      r.left < innerWidth &&
+      r.top < innerHeight
+    );
   });
 }
 
@@ -1199,6 +1212,33 @@ test("single tap reveals and synchronously focuses composer, then dismissal hide
   // by "networkidle"; make sure, so the assertion below is unambiguous
   // about engagement (not splash-dismissal) being the cause of reveal.
   await expect.poll(() => loadquoteGone(page), { timeout: 5000 }).toBe(true);
+  expect(await ribbonVisible(page)).toBe(false);
+
+  // Critical Android precondition: the composer must already be focusable
+  // before engagement. display:none descendants can become focusable after JS
+  // reveals them on desktop Chromium, but Android may refuse to grant the soft
+  // keyboard because they were not focusable when the gesture began.
+  const hiddenFocus = await page.evaluate(() => {
+    const input = document.getElementById("inputText");
+    const bar = document.getElementById("inputBar");
+    input.focus({ preventScroll: true });
+    const focused = document.activeElement === input;
+    const style = getComputedStyle(bar);
+    const state = {
+      focused,
+      hiddenClass: bar.classList.contains("hidden"),
+      display: style.display,
+      opacity: style.opacity,
+      position: style.position,
+    };
+    input.blur();
+    return state;
+  });
+  expect(hiddenFocus.focused, "hidden native composer must remain focusable").toBe(true);
+  expect(hiddenFocus.hiddenClass).toBe(true);
+  expect(hiddenFocus.display, "hidden composer must not use display:none").not.toBe("none");
+  expect(hiddenFocus.opacity).toBe("0");
+  expect(hiddenFocus.position).toBe("absolute");
   expect(await ribbonVisible(page)).toBe(false);
 
   // Engage: ONE stationary tap must reveal and focus the real native composer

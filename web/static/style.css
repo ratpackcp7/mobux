@@ -1202,7 +1202,21 @@ h1, h2, h3 { margin: 0; }
   flex-direction: column;
 }
 .input-bar.hidden {
-  display: none;
+  /* Keep the native composer laid out and programmatically focusable even
+     before engagement. Android Chrome may refuse to open the software keyboard
+     when focus targets a descendant that was display:none at gesture start,
+     even if JS reveals it in that same touchend task. Absolute positioning
+     removes the bar from the flex layout (zero terminal-space cost), while the
+     off-screen transform + opacity keep it visually absent without destroying
+     its focusability. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(110%);
+  border-top-color: transparent;
 }
 
 .input-ribbon {

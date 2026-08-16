@@ -331,15 +331,16 @@ export function createInputBar(engine, send, node = '') {
   const overlay = document.getElementById('touchOverlay');
 
   function activateInput() {
-    show();
-    // Android only opens the soft keyboard reliably when focus happens inside
-    // the same user gesture. Deferring focus loses that activation token and
-    // turns tap-to-type into an accidental double-tap flow.
+    // Focus FIRST while #inputText is already laid out (the visually hidden
+    // bar stays focusable via CSS). This keeps Android's software-keyboard
+    // activation tied directly to the user's touchend. Revealing/resizing the
+    // bar happens only after focus has been accepted.
     try {
       input.focus({ preventScroll: true });
     } catch (_) {
       input.focus();
     }
+    show();
   }
 
   // ── Auto-hide bar when the keyboard dismisses ─────────────────────
