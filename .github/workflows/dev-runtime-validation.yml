@@ -1,0 +1,42 @@
+name: Dev runtime validation
+
+on:
+  push:
+    branches: [ci/mobux-mobile-input-dev-runtime-20260816]
+
+jobs:
+  dev-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: ~/.cache/sherpa-rs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y lsof
+      - name: Start dev backend and SPA
+        run: make dev-up
+        env:
+          MOBUX_USER: dev
+          MOBUX_PIN: '00000'
+          MOBUX_DATA_DIR: ${{ runner.temp }}/mobux-dev-data
+          DEV_LOG_DIR: ${{ runner.temp }}/mobux-dev-logs
+      - name: Verify dev listeners and HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          lsof -nP -iTCP:5152 -sTCP:LISTEN
+          lsof -nP -iTCP:5173 -sTCP:LISTEN
+          curl --fail --silent --show-error --insecure --user dev:00000 https://127.0.0.1:5152/ >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:5173/static/spa/ >/dev/null
+          echo 'DEV_RUNTIME backend=https://127.0.0.1:5152/ spa=http://127.0.0.1:5173/static/spa/'
+      - name: Stop dev backend and SPA
+        if: always()
+        run: |
+          make dev-down
+          ! lsof -i :5152 >/dev/null 2>&1
+          ! lsof -i :5173 >/dev/null 2>&1
