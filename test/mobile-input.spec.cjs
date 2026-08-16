@@ -195,9 +195,17 @@ test('switching Compose→Live sends pending text once; Live→Compose Enter doe
   await expect.poll(() => visibleTerminalText(page), { timeout: 5000 }).toContain(command);
   await setMode(page, 'compose');
   await input.press('Enter');
-  await expect.poll(() => visibleTerminalText(page), { timeout: 5000 }).toContain(marker);
+  // Wait for the real terminal-side acceptance condition, not merely the first
+  // visible marker. The command echo can render a few milliseconds before
+  // `echo` writes its output, so sampling tmux immediately after the first DOM
+  // match is a race. Exactly two occurrences proves one command echo + one
+  // command output, while the duplicate-command assertion below still catches
+  // accidental Compose/Live double-send.
+  await expect.poll(
+    () => (capturedPane().match(new RegExp(marker, 'g')) || []).length,
+    { timeout: 5000 },
+  ).toBe(2);
   const pane = capturedPane();
-  expect((pane.match(new RegExp(marker, 'g')) || []).length).toBe(2); // echoed command + command output
   expect(pane).not.toContain(command + command);
 });
 
