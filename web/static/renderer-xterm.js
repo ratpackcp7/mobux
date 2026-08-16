@@ -126,7 +126,10 @@ export function createXtermRenderer(host, options = {}) {
       // the inner content box and shave a column off the right edge.
       const pad = horizontalPadding();
       const cols = Math.max(20, Math.floor((hostW - pad) / c.width) - 1);
-      const rows = Math.max(10, Math.floor(hostH / c.height) - 1);
+      // Use every whole row that actually fits. The old `- 1` vertical fudge
+      // deliberately left one full terminal row unused, which became a visible
+      // dead strip above the mobile composer on real Android devices.
+      const rows = Math.max(10, Math.floor(hostH / c.height));
       return { cols, rows, cellWidth: c.width, cellHeight: c.height };
     },
     cellSize,

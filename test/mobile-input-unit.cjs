@@ -44,6 +44,11 @@ async function loadInputMode() {
   const jsx = fs.readFileSync(path.join(__dirname, '../web/spa/src/components/TerminalIsland.jsx'), 'utf8');
   assert.match(jsx, /type=["']search["']/, 'real-device Chrome workaround must keep search semantics');
   assert.match(jsx, /autocorrect=["']on["']|autoCorrect=["']on["']/, 'Gboard autocorrect/prediction must remain enabled');
+  assert.match(jsx, /autocomplete=["']one-time-code["']/, 'composer must use a valid non-address/payment/password autofill semantic');
+  assert(!/name=["']mobux-composer["']/.test(jsx), 'composer must not advertise a reusable form-field name to Chrome autofill');
+
+  const xtermRenderer = fs.readFileSync(path.join(__dirname, '../web/static/renderer-xterm.js'), 'utf8');
+  assert(!xtermRenderer.includes('Math.floor(hostH / c.height) - 1'), 'xterm must not reserve a whole blank row below the PTY');
 
   console.log('MOBILE_INPUT_UNIT_PASS');
 })().catch((err) => {

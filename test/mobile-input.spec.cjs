@@ -69,14 +69,19 @@ function capturedPane() {
 
 async function keyboardLikeResize(page) {
   const width = page.viewportSize().width;
+  // Reproduce the physical Pixel/TWA failure mode: layout viewport and
+  // visualViewport shrink together. The old implementation compared their
+  // current heights and therefore never marked the keyboard open.
   await page.setViewportSize({ width, height: KEYBOARD_HEIGHT });
-  await page.evaluate(() => {
-    // Playwright changes layout + visual viewport together. Preserve the old
-    // layout height so Mobux sees the same visualViewport shrink Android emits.
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-    window.visualViewport?.dispatchEvent(new Event('resize'));
-  });
+  await page.evaluate(() => window.visualViewport?.dispatchEvent(new Event('resize')));
   await page.waitForTimeout(350);
+}
+
+async function closeKeyboardLikeResize(page) {
+  const width = page.viewportSize().width;
+  await page.setViewportSize({ width, height: 800 });
+  await page.evaluate(() => window.visualViewport?.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(250);
 }
 
 async function geometry(page) {
@@ -84,9 +89,12 @@ async function geometry(page) {
     const term = document.getElementById('terminal').getBoundingClientRect();
     const bar = document.getElementById('inputBar').getBoundingClientRect();
     const row = document.querySelector('.input-row').getBoundingClientRect();
+    const terminalRows = window.__mobuxView?.test?.rows?.() ?? 0;
+    const cellHeight = window.__mobuxView?.test?.cellMetrics?.()?.height ?? 0;
     return {
       gap: bar.top - term.bottom,
       termBottom: term.bottom,
+      termHeight: term.height,
       barTop: bar.top,
       barBottom: bar.bottom,
       rowHeight: row.height,
@@ -95,7 +103,9 @@ async function geometry(page) {
       bodyKeyboardOpen: document.body.classList.contains('keyboard-open'),
       viewportHeight: window.visualViewport?.height ?? window.innerHeight,
       viewportTop: window.visualViewport?.offsetTop ?? 0,
-      terminalRows: window.__mobuxView?.test?.rows?.() ?? 0,
+      terminalRows,
+      cellHeight,
+      unusedTerminalPx: cellHeight > 0 ? term.height - terminalRows * cellHeight : null,
     };
   });
 }
@@ -229,6 +239,9 @@ test('keyboard-open geometry has no dead strip, keeps last terminal area visible
   expect(g.termBottom).toBeLessThanOrEqual(g.barTop + 1.5);
   expect(g.barBottom).toBeLessThanOrEqual(g.viewportTop + g.viewportHeight + 1.5);
   expect(g.terminalRows).toBeGreaterThan(5);
+  expect(g.cellHeight).toBeGreaterThan(0);
+  expect(g.unusedTerminalPx, `unused terminal height=${g.unusedTerminalPx}px`).toBeGreaterThanOrEqual(-1.5);
+  expect(g.unusedTerminalPx, `unused terminal height=${g.unusedTerminalPx}px vs cell=${g.cellHeight}px`).toBeLessThan(g.cellHeight);
   expect(g.bodyKeyboardOpen).toBe(true);
   expect(parseFloat(g.bodyHeightStyle)).toBeGreaterThan(0);
 
@@ -241,11 +254,7 @@ test('keyboard close clears inline geometry state', async ({ page }) => {
   await bootTerminal(page);
   await showComposer(page);
   await keyboardLikeResize(page);
-  await page.evaluate(() => {
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: window.visualViewport.height });
-    window.visualViewport?.dispatchEvent(new Event('resize'));
-  });
-  await page.waitForTimeout(250);
+  await closeKeyboardLikeResize(page);
   const state = await page.evaluate(() => ({
     height: document.body.style.height,
     top: document.body.style.top,
@@ -276,9 +285,9 @@ test('composer keeps real-device search workaround while preserving Gboard autoc
     type: 'search',
     role: 'searchbox',
     inputmode: 'text',
-    autocomplete: 'off',
+    autocomplete: 'one-time-code',
     autocorrect: 'on',
-    name: 'mobux-composer',
+    name: null,
     formType: 'other',
     lpignore: 'true',
   });

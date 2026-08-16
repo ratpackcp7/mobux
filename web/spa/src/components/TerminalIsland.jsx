@@ -405,13 +405,12 @@ export function TerminalIsland({ node, session }) {
             inputmode="text"
             enterkeyhint="send"
             placeholder="Type here…"
-            autocomplete="off"
+            autocomplete="one-time-code"
             autocorrect="on"
             autocapitalize="off"
             spellcheck={false}
             data-form-type="other"
             data-lpignore="true"
-            name="mobux-composer"
           />
           <button id="inputExpandBtn" type="button" class="input-expand" aria-expanded="false" aria-label="Expand controls" title="Expand controls">
             ▾

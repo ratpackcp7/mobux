@@ -786,17 +786,35 @@ export function createTerminal({
   // When keyboard closes, inline height is cleared — no stale spacer.
   if (window.visualViewport) {
     const vv = window.visualViewport;
+    // Android does not expose one universal "keyboard open" geometry model.
+    // Some Chrome/TWA builds keep innerHeight at the closed layout height;
+    // others shrink innerHeight together with visualViewport. Comparing the
+    // two current values therefore misses the latter completely. Track the
+    // closed visual-viewport baseline instead and detect a material drop from
+    // that baseline. Width changes reset the baseline for orientation changes.
     let lastH = vv.height;
+    let lastW = vv.width;
+    let closedH = vv.height;
     const trackKeyboard = () => {
-      const shrunk = vv.height < window.innerHeight - 1;
+      const widthChanged = Math.abs(vv.width - lastW) > 20;
+      if (widthChanged) {
+        lastW = vv.width;
+        closedH = vv.height;
+      } else if (vv.height > closedH) {
+        // Browser chrome hiding can increase the usable closed viewport; keep
+        // the highest same-orientation height as the baseline.
+        closedH = vv.height;
+      }
+      const keyboardDrop = closedH - vv.height;
+      const keyboardThreshold = Math.max(96, closedH * 0.15);
+      const shrunk = !widthChanged && keyboardDrop >= keyboardThreshold;
       // Single source of truth: body height = visualViewport height when
       // keyboard shrinks viewport, otherwise clear to let 100dvh flex win.
       document.body.style.height = shrunk ? `${vv.height}px` : "";
       document.body.style.top = shrunk ? `${vv.offsetTop}px` : "";
-      // Also reflect compact state on body for CSS hooks if needed
       if (shrunk) document.body.classList.add("keyboard-open");
       else document.body.classList.remove("keyboard-open");
-      if (Math.abs(vv.height - lastH) > 0.5) {
+      if (Math.abs(vv.height - lastH) > 0.5 || widthChanged) {
         lastH = vv.height;
         // Reader/synthetic-scroll has a same-task bottom-pin contract: after
         // the body geometry changes, one synchronous resize must let it measure
