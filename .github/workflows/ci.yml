@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, ci/mobux-mobile-input-ci3-20260816]
   pull_request:
     branches: [main]
 
