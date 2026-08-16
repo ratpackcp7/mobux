@@ -150,22 +150,15 @@ if (fs.existsSync(path.join(SPA_DIR, 'package.json'))) {
 }
 
 // ── 4. Build hash ─────────────────────────────────────────────────────
-const crypto = require('crypto');
+// The client is more than the two renderer bundles: terminal.js, input-bar.js,
+// prefs.js, CSS, SPA output, etc. all participate in the running module graph.
+// Hash the complete served client asset tree so any deploy that changes browser
+// code gets a new identity and the update watcher can force a hard reload.
+// Generated build-info files are excluded by computeStaticBuildHash() to avoid
+// self-reference; source maps and Android install artifacts are excluded too.
+const { computeStaticBuildHash } = require('./build-hash.js');
 const STATIC = path.join(ROOT, 'web', 'static');
-
-const xtermBundle = path.join(VENDOR, 'xterm.bundle.js');
-const sterkBundle = path.join(VENDOR, 'sterk.bundle.js');
-
-const xtermContents = fs.existsSync(xtermBundle) ? fs.readFileSync(xtermBundle) : Buffer.alloc(0);
-const sterkContents = fs.existsSync(sterkBundle) ? fs.readFileSync(sterkBundle) : Buffer.alloc(0);
-
-const hash = crypto
-  .createHash('sha256')
-  .update(xtermContents)
-  .update(sterkContents)
-  .digest('hex')
-  .slice(0, 8);
-
+const hash = computeStaticBuildHash(STATIC);
 const builtAt = new Date().toISOString();
 
 fs.writeFileSync(

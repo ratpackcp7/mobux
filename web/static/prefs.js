@@ -13,6 +13,24 @@
 // by URL, so `get()` reads the same in-memory blob the SPA hydrated at boot.
 
 const ENDPOINT = "/api/settings/preferences";
+const REQUEST_TIMEOUT_MS = 2500;
+
+async function fetchBounded(input, init = {}) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try { controller?.abort(); } catch (_) {}
+      reject(new Error(`preferences request timed out after ${REQUEST_TIMEOUT_MS}ms`));
+    }, REQUEST_TIMEOUT_MS);
+  });
+  try {
+    const request = fetch(input, controller ? { ...init, signal: controller.signal } : init);
+    return await Promise.race([request, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const DEFAULTS = Object.freeze({
   renderer: "xterm",
@@ -40,7 +58,7 @@ export function snapshot() {
 // synchronous get() from the engine returns server values, not defaults.
 export async function hydrate() {
   try {
-    const resp = await fetch(ENDPOINT, {
+    const resp = await fetchBounded(ENDPOINT, {
       headers: { Accept: "application/json" },
     });
     if (resp.ok) {
@@ -68,7 +86,7 @@ async function persist(key, value) {
   // versioning needed.
   let base = state;
   try {
-    const resp = await fetch(ENDPOINT, {
+    const resp = await fetchBounded(ENDPOINT, {
       headers: { Accept: "application/json" },
     });
     if (resp.ok) {
@@ -83,7 +101,7 @@ async function persist(key, value) {
   state = merged;
 
   try {
-    await fetch(ENDPOINT, {
+    await fetchBounded(ENDPOINT, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(merged),

@@ -214,6 +214,8 @@ test-smoke:
 
 .PHONY: test-critical-path
 test-critical-path:
+	node test/build-hash-unit.cjs
+	node test/prefs-timeout-unit.cjs
 	node test/mobile-input-unit.cjs
 	@$(MAKE) smoke-start
 	@trap '$(MAKE) smoke-stop' EXIT; \
