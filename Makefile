@@ -235,6 +235,8 @@ test-e2e:
 	@trap '$(MAKE) smoke-stop' EXIT; \
 		MOBUX_URL=http://127.0.0.1:$(MOBUX_SMOKE_PORT) \
 		MOBUX_USER=smoke MOBUX_PASS=00000 \
+		MOBUX_STT_URL=http://127.0.0.1:$(MOBUX_SMOKE_PORT) \
+		MOBUX_STT_USER=smoke MOBUX_STT_PASS=00000 \
 		npx playwright test
 
 # ---------------------------------------------------------------------------
