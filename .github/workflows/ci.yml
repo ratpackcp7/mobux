@@ -47,11 +47,15 @@ jobs:
           CI: true
           MOBUX_URL: http://localhost:8281
       - name: Run smoke tests
+        # Full e2e after merge only; PRs run check + critical path (ACP Rule 40).
+        if: github.event_name == 'push'
         run: make test-smoke
         env:
           CI: true
           MOBUX_URL: http://localhost:8281
       - name: Run SPA (/app) tests
+        # Full e2e after merge only; PRs run check + critical path (ACP Rule 40).
+        if: github.event_name == 'push'
         run: make test-spa
         env:
           CI: true
